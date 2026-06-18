@@ -1,0 +1,20 @@
+# Secrets & credentials
+*.pem
+.env
+*.env.local
+hf_token.txt
+
+# Build artifacts / large files (never commit the model or EIF)
+*.eif
+*.gguf
+enclave/model/
+models/
+build-output.json
+
+# State
+infra/.instance-id
+
+# Python / OS
+__pycache__/
+*.pyc
+.DS_Store
