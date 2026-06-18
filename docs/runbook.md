@@ -144,3 +144,10 @@ After a start, re-run steps 6–7 (enclaves don't survive a stop/reboot).
 | HF `401 Gated` | Accept the model license on HF and export a valid `HF_TOKEN`, or switch to the Qwen2.5 fallback in `config.env`. |
 | `infer.sh` 502 from bridge | Enclave not running (`nitro-cli describe-enclaves`) or wrong `ENCLAVE_CID`. |
 | Out-of-memory loading model | Use a smaller quant (Q4_K_M → Q3) or a bigger instance; raise enclave memory. |
+| **build-enclave E51** "artifacts path…/HOME not set" | Non-login shells (SSM Run Command) have no `HOME`. `export HOME=/root NITRO_CLI_ARTIFACTS=…` (build-enclave.sh does this). |
+| **build-enclave E48** linuxkit "Create outputs:" empty | OOM building the ramfs — the model + 8 GB enclave reservation starve RAM. Add swap (`setup-parent.sh` does) and set `TMPDIR` to the EBS volume. |
+| **run-enclave E26** "Insufficient memory… minimum should be N MB" | `--memory` (and `allocator.yaml`) must be ≥ ~1.3× the EIF size. Raise `ENCLAVE_MEM_MIB`. |
+| **Allocator restart fails** raising memory at runtime | Hugepage fragmentation. Set the value in `allocator.yaml`, then **reboot** so it reserves at boot. |
+| **Enclave exits instantly** / `console` E44 | App (PID 1) died. Capture boot log with `nitro-cli run-enclave … --debug-mode --attach-console`. Two classic causes below. |
+| `execvpe: python: No such file or directory` (in enclave console) | Nitro init ignores image `PATH`. Use an **absolute** interpreter path in `CMD` (`/usr/local/bin/python`). |
+| `libgomp.so.1: cannot open shared object file` | The compiled `libllama.so` needs OpenMP at runtime. Keep `libgomp1` installed (don't `autoremove` it). |

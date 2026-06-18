@@ -4,9 +4,10 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+export HOME="${HOME:-/root}"
 ENCLAVE_CID="${ENCLAVE_CID:-16}"
 ENCLAVE_CPUS="${ENCLAVE_CPUS:-4}"
-ENCLAVE_MEM_MIB="${ENCLAVE_MEM_MIB:-8192}"
+ENCLAVE_MEM_MIB="${ENCLAVE_MEM_MIB:-10240}"   # >= ~1.3x EIF size; see config.env
 EIF="llm.eif"
 
 [ -f "$EIF" ] || { echo "$EIF not found. Run build-enclave.sh first."; exit 1; }

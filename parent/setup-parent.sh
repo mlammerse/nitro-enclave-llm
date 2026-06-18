@@ -1,28 +1,38 @@
 #!/usr/bin/env bash
-# Run ON the EC2 parent (via SSM shell). Installs the Nitro Enclaves toolchain,
-# Docker, and configures the enclave resource allocator.
-set -euo pipefail
+# Run ON the EC2 parent (via SSM Run Command as root, or `sudo bash` in a shell).
+# Installs the Nitro Enclaves toolchain + Docker, configures the allocator, and
+# adds swap (needed so the EIF build of a multi-GB model doesn't OOM-kill linuxkit).
+set -e
 
-# Resource reservation for the enclave (parent keeps the rest).
+# Reservation for the enclave. Must be >= the --memory you pass to run-enclave,
+# which must be >= ~1.3x the EIF size. 10240 fits a 3B Q4 model with headroom.
 ENCLAVE_CPUS="${ENCLAVE_CPUS:-4}"
-ENCLAVE_MEM_MIB="${ENCLAVE_MEM_MIB:-8192}"
+ENCLAVE_MEM_MIB="${ENCLAVE_MEM_MIB:-10240}"
 
 echo "==> Installing nitro-cli, devel, docker..."
-sudo dnf install -y aws-nitro-enclaves-cli aws-nitro-enclaves-cli-devel docker git python3-pip
+dnf install -y aws-nitro-enclaves-cli aws-nitro-enclaves-cli-devel docker git python3-pip
 
-echo "==> Adding $USER to ne + docker groups..."
-sudo usermod -aG ne "$USER"
-sudo usermod -aG docker "$USER"
+echo "==> Groups (no-op when running as root; needed for a login user)..."
+usermod -aG ne "${SUDO_USER:-$USER}" 2>/dev/null || true
+usermod -aG docker "${SUDO_USER:-$USER}" 2>/dev/null || true
 
 echo "==> Configuring enclave allocator: ${ENCLAVE_CPUS} vCPU / ${ENCLAVE_MEM_MIB} MiB"
-sudo sed -i "s/^memory_mib:.*/memory_mib: ${ENCLAVE_MEM_MIB}/" /etc/nitro_enclaves/allocator.yaml
-sudo sed -i "s/^cpu_count:.*/cpu_count: ${ENCLAVE_CPUS}/"   /etc/nitro_enclaves/allocator.yaml
+sed -i "s/^memory_mib:.*/memory_mib: ${ENCLAVE_MEM_MIB}/" /etc/nitro_enclaves/allocator.yaml
+sed -i "s/^cpu_count:.*/cpu_count: ${ENCLAVE_CPUS}/"   /etc/nitro_enclaves/allocator.yaml
+
+echo "==> Adding 8G swap (for the EIF build)..."
+if ! swapon --show | grep -q /swapfile; then
+  fallocate -l 8G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=8192
+  chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile
+  grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
 
 echo "==> Enabling services..."
-sudo systemctl enable --now docker
-sudo systemctl enable --now nitro-enclaves-allocator.service
+systemctl enable --now docker
+systemctl enable --now nitro-enclaves-allocator.service
 
 echo
-echo "Setup done. Group membership (ne/docker) needs a fresh login to take effect."
-echo "Re-connect via SSM (./01-connect.sh) or run:  newgrp ne"
+echo "NOTE: raising the allocator reservation later requires a REBOOT to reserve"
+echo "hugepages cleanly (runtime re-reservation fails on memory fragmentation)."
 nitro-cli --version || true
+free -h
