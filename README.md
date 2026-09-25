@@ -12,21 +12,7 @@ requests in and responses out.
 
 ## Architecture (PoC)
 
-```
-  Your Mac (control plane)                AWS ap-southeast-2 (Sydney)
-  ┌──────────────────────┐                ┌───────────────────────────────────────┐
-  │ aws cli / gh / ssm    │   SSM session  │  EC2 parent  (c6i.2xlarge, AL2023)      │
-  │ docs + scripts        │───────────────▶│                                         │
-  └──────────────────────┘                │   vsock-bridge.py  (127.0.0.1:8080)     │
-                                           │            │  AF_VSOCK CID 16:5000       │
-                                           │            ▼                            │
-                                           │   ┌─────────────────────────────────┐  │
-                                           │   │  Nitro Enclave (no net/disk)     │  │
-                                           │   │  vsock-server.py + llama.cpp     │  │
-                                           │   │  Llama 3.2 3B Q4 (baked in)      │  │
-                                           │   └─────────────────────────────────┘  │
-                                           └───────────────────────────────────────┘
-```
+![nitro-enclave-llm architecture: Mac control plane → SSM → EC2 parent (vsock-bridge.py) → AF_VSOCK → Nitro Enclave (llama.cpp + Llama 3.2 3B Q4)](docs/architecture.svg)
 
 Key constraint: **enclaves have no GPU** → CPU-only inference → small quantized model.
 
